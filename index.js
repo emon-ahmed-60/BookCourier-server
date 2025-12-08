@@ -44,7 +44,7 @@ async function run() {
    
     app.post("/books", async (req, res) => {
       const newBook = req.body;
-      const result = await booksCollection.insertOne(newBook);
+      const result = await booksCollection.insertOne(newBook); 
       res.send(result);
     });
 
@@ -54,11 +54,11 @@ async function run() {
       res.send(libraries);
     });
 
-    app.post("/libraries", async (req, res) => {
-      const newLibrary = req.body;
-      const result = await librariesCollection.insertOne(newLibrary);
-      res.send(result);
-    });
+    // app.post("/libraries", async (req, res) => {
+    //   const newLibrary = req.body;
+    //   const result = await librariesCollection.insertOne(newLibrary);
+    //   res.send(result);
+    // });
 
     app.patch("/books/:id", async (req, res) => {
       const id = req.params.id;
