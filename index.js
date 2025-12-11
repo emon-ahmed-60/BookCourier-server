@@ -28,9 +28,16 @@ async function run() {
     const database = client.db("BookCourier");
     const booksCollection = database.collection("books");
     const librariesCollection = database.collection("libraries");
+    const ordersCollection = database.collection("bookorders");
 
     app.get("/books/latest", async (req, res) => {
       const cursor = booksCollection.find().sort({ added_at: -1 }).limit(4);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
+    app.get("/books", async (req, res) => {
+      const cursor = booksCollection.find();
       const result = await cursor.toArray();
       res.send(result);
     });
@@ -41,17 +48,31 @@ async function run() {
       const book = await booksCollection.findOne(query);
       res.send(book);
     });
-   
-    app.post("/books", async (req, res) => {
-      const newBook = req.body;
-      const result = await booksCollection.insertOne(newBook); 
-      res.send(result);
-    });
 
     app.get("/libraries", async (req, res) => {
       const cursor = librariesCollection.find();
       const libraries = await cursor.toArray();
       res.send(libraries);
+    });
+
+    app.get("/bookorders", async (req, res) => {
+      const userEmail = req.query.email;
+      const query = { email: userEmail };
+      const cursor = ordersCollection.find(query);
+      const orders = await cursor.toArray();
+      res.send(orders);
+    });
+
+    app.post("/books", async (req, res) => {
+      const newBook = req.body;
+      const result = await booksCollection.insertOne(newBook);
+      res.send(result);
+    });
+
+    app.post("/bookorders", async (req, res) => {
+      const newOrder = req.body;
+      const result = await ordersCollection.insertOne(newOrder);
+      res.send(result);
     });
 
     // app.post("/libraries", async (req, res) => {
