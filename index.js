@@ -64,6 +64,7 @@ async function run() {
 
     const database = client.db("BookCourier");
     const usersCollection = database.collection("users");
+    const librarianCollection = database.collection("librarians");
     const booksCollection = database.collection("books");
     const librariesCollection = database.collection("libraries");
     const ordersCollection = database.collection("bookorders");
@@ -81,6 +82,52 @@ async function run() {
       }
 
       const result = await usersCollection.insertOne(user);
+      res.send(result);
+    });
+
+    app.post("/librarians", async (req, res) => {
+      const librarian = req.body;
+      librarian.status = "pending";
+      librarian.createdAt = new Date();
+
+      const result = await librarianCollection.insertOne(librarian);
+      res.send(result);
+    });
+
+    app.patch("/librarian/:id", verifyFBToken, async (req, res) => {
+      const status = req.body.status;
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const update = {
+        $set: {
+          status: status,
+        },
+      };
+
+      if (status === "approve") {
+        const email = req.body.email;
+        const userQuery = { email };
+        const updateUser = {
+          $set: {
+            role: "librarian",
+          },
+        };
+        const userResult = await usersCollection.updateOne(
+          userQuery,
+          updateUser
+        );
+      }
+      const result = await librarianCollection.updateOne(query, update);
+      res.send(result);
+    });
+
+    app.get("/librarians", async (req, res) => {
+      const query = {};
+      if (req.query.status) {
+        query.status = req.query.status;
+      }
+      const cursor = librarianCollection.find(query);
+      const result = await cursor.toArray();
       res.send(result);
     });
 
