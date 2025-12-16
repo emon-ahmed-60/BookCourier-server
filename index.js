@@ -4,6 +4,13 @@ const app = express();
 
 const port = process.env.PORT || 8000;
 const crypto = require("crypto");
+const admin = require("firebase-admin");
+
+const serviceAccount = require("./bookcourier-firebase-adminsdk.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 function generateTrackingId() {
   const prefix = "PRCL"; // your brand prefix
@@ -17,6 +24,26 @@ function generateTrackingId() {
 require("dotenv").config();
 app.use(cors());
 app.use(express.json());
+
+const verifyFBToken = async (req, res, next) => {
+  const token = req.headers.authorization;
+
+  if (!token) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+
+  try {
+    const idToken = token.split(" ")[1];
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    console.log(decoded);
+
+    req.decoded_email = decoded.email;
+
+    next();
+  } catch (error) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+};
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@cluster0.mz20f4d.mongodb.net/?appName=Cluster0`;
@@ -36,10 +63,26 @@ async function run() {
     await client.connect();
 
     const database = client.db("BookCourier");
+    const usersCollection = database.collection("users");
     const booksCollection = database.collection("books");
     const librariesCollection = database.collection("libraries");
     const ordersCollection = database.collection("bookorders");
     const paymentCollection = database.collection("payments");
+
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      user.role = "user";
+      user.createdAt = new Date();
+      const email = user.email;
+      const userExist = usersCollection.find({ email });
+
+      if (userExist) {
+        return res.send({ message: "user exist" });
+      }
+
+      const result = await usersCollection.insertOne(user);
+      res.send(result);
+    });
 
     app.get("/books/latest", async (req, res) => {
       try {
@@ -106,11 +149,18 @@ async function run() {
       }
     });
 
-    app.get("/payments", async (req, res) => {
+    app.get("/payments", verifyFBToken, async (req, res) => {
       try {
         const email = req.query.email;
-        const query = { customerEmail: email };
-        const cursor = paymentCollection.find(query);
+        const query = {};
+        if (email) {
+          query.customerEmail = email;
+
+          if (email !== req.decoded_email) {
+            return res.status(403).send({ message: "forbidden access" });
+          }
+        }
+        const cursor = paymentCollection.find(query).sort({ paidAt: -1 });
         const result = await cursor.toArray();
         res.send(result);
       } catch (error) {
@@ -261,10 +311,10 @@ async function run() {
       res.send({ success: true });
     });
 
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
