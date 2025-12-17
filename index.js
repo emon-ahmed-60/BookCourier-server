@@ -35,7 +35,6 @@ const verifyFBToken = async (req, res, next) => {
   try {
     const idToken = token.split(" ")[1];
     const decoded = await admin.auth().verifyIdToken(idToken);
-    console.log(decoded);
 
     req.decoded_email = decoded.email;
 
@@ -69,20 +68,52 @@ async function run() {
     const librariesCollection = database.collection("libraries");
     const ordersCollection = database.collection("bookorders");
     const paymentCollection = database.collection("payments");
+    const wishlistsCollection = database.collection("wishlists");
+    const reviewsCollection = database.collection("reviews");
+
+    app.get("/users", async (req, res) => {
+      const cursor = usersCollection.find();
+      const result = await cursor.toArray();
+      res.send(result);
+    });
 
     app.post("/users", async (req, res) => {
       const user = req.body;
-      user.role = "user";
-      user.createdAt = new Date();
       const email = user.email;
-      const userExist = usersCollection.find({ email });
+      const existingUser = await usersCollection.findOne({ email });
 
-      if (userExist) {
-        return res.send({ message: "user exist" });
+      if (existingUser) {
+        return res.send({
+          existingUserId: existingUser._id,
+          message: "user already exists",
+        });
       }
+
+      user.createdAt = new Date();
+      user.role = "user";
 
       const result = await usersCollection.insertOne(user);
       res.send(result);
+    });
+
+    app.patch("/users/:id", async (req, res) => {
+      const id = req.params.id;
+      const roleInfo = req.body;
+      const query = { _id: new ObjectId(id) };
+      const updateUser = {
+        $set: {
+          role: roleInfo.role,
+        },
+      };
+      const result = await usersCollection.updateOne(query, updateUser);
+      res.send(result);
+    });
+
+    app.get("/users/:email/role", async (req, res) => {
+      const email = req.params.email;
+      const query = { email };
+      const result = await usersCollection.findOne(query);
+      res.send({ role: user?.role || "user" });
     });
 
     app.post("/librarians", async (req, res) => {
@@ -92,6 +123,46 @@ async function run() {
 
       const result = await librarianCollection.insertOne(librarian);
       res.send(result);
+    });
+
+    app.post("/review", async (req, res) => {
+      const review = req.body;
+      const result = await reviewsCollection.insertOne(review);
+      res.send(result);
+    });
+
+    app.get("/reviews/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { reviewId: id };
+      const cursor = reviewsCollection.find(query);
+      const result =await cursor.toArray();
+      res.send(result);
+    });
+
+    app.post("/wishlist", async (req, res) => {
+      try {
+        const email = req.query.email;
+        const wishlist = req.body;
+        wishlist.email = email;
+        const result = await wishlistsCollection.insertOne(wishlist);
+        res.send(result);
+      } catch (error) {
+        console.log(error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
+    app.get("/wishlist", async (req, res) => {
+      try {
+        const email = req.query.email;
+        const query = { email };
+        const cursor = wishlistsCollection.find(query);
+        const result = await cursor.toArray();
+        res.send(result);
+      } catch (error) {
+        console.log(error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
     });
 
     app.patch("/librarian/:id", verifyFBToken, async (req, res) => {
