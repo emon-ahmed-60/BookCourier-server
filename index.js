@@ -71,6 +71,17 @@ async function run() {
     const wishlistsCollection = database.collection("wishlists");
     const reviewsCollection = database.collection("reviews");
 
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded_email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+
+      if (!user || user.role !== "admin") {
+        res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+
     app.get("/users", async (req, res) => {
       const cursor = usersCollection.find();
       const result = await cursor.toArray();
@@ -96,7 +107,7 @@ async function run() {
       res.send(result);
     });
 
-    app.patch("/users/:id", async (req, res) => {
+    app.patch("/users/:id", verifyFBToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const roleInfo = req.body;
       const query = { _id: new ObjectId(id) };
@@ -112,7 +123,7 @@ async function run() {
     app.get("/users/:email/role", async (req, res) => {
       const email = req.params.email;
       const query = { email };
-      const result = await usersCollection.findOne(query);
+      const user = await usersCollection.findOne(query);
       res.send({ role: user?.role || "user" });
     });
 
@@ -135,7 +146,7 @@ async function run() {
       const id = req.params.id;
       const query = { reviewId: id };
       const cursor = reviewsCollection.find(query);
-      const result =await cursor.toArray();
+      const result = await cursor.toArray();
       res.send(result);
     });
 
@@ -165,7 +176,7 @@ async function run() {
       }
     });
 
-    app.patch("/librarian/:id", verifyFBToken, async (req, res) => {
+    app.patch("/librarian/:id", verifyFBToken,verifyAdmin, async (req, res) => {
       const status = req.body.status;
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -204,7 +215,11 @@ async function run() {
 
     app.get("/books/latest", async (req, res) => {
       try {
-        const cursor = booksCollection.find().sort({ added_at: -1 }).limit(4);
+        let query = { bookStatus: { $ne: "unpublished" } };
+        const cursor = booksCollection
+          .find(query)
+          .sort({ added_at: -1 })
+          .limit(4);
         const result = await cursor.toArray();
         res.send(result);
       } catch (error) {
@@ -213,13 +228,26 @@ async function run() {
       }
     });
 
+    app.patch("/book/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const update = req.body;
+      const updateBook = {
+        $set: {
+          bookStatus: update.bookStatus,
+        },
+      };
+      const result = await booksCollection.updateOne(query, updateBook);
+      res.send(result);
+    });
+
     app.get("/books", async (req, res) => {
       try {
         const { search, order } = req.query;
-        let query = {};
+        let query = { bookStatus: { $ne: "unpublished" } };
         let sortOption = {};
         if (search) {
-          query = { title: { $regex: search, $options: "i" } };
+          query = { ...query, title: { $regex: search, $options: "i" } };
         }
         sortOption.mrp_price = order === "asc" ? 1 : -1;
         const cursor = booksCollection.find(query).sort(sortOption);
@@ -252,6 +280,13 @@ async function run() {
         console.log(error);
         res.status(500).json({ error: "Internal Server Error" });
       }
+    });
+
+    app.get("/library-orders", async (req, res) => {
+      const email = req.query.email;
+      const query = { librarianEmail: email };
+      const orders = await ordersCollection.find(query).toArray();
+      res.send(orders);
     });
 
     app.get("/bookorders", async (req, res) => {
@@ -309,11 +344,13 @@ async function run() {
       }
     });
 
-    // app.post("/libraries", async (req, res) => {
-    //   const newLibrary = req.body;
-    //   const result = await librariesCollection.insertOne(newLibrary);
-    //   res.send(result);
-    // });
+    app.get("/my-books", async (req, res) => {
+      const email = req.query.email;
+      const query = { email };
+      const cursor = booksCollection.find(query);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
 
     app.patch("/books/:id", async (req, res) => {
       try {
@@ -328,6 +365,24 @@ async function run() {
           },
         };
         const result = await booksCollection.updateOne(query, updatedData);
+        res.send(result);
+      } catch (error) {
+        console.log(error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
+    app.patch("/book-update/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const update = req.body;
+        const query = { _id: new ObjectId(id) };
+        const updateBook = {
+          $set: {
+            status: update.bookStatus,
+          },
+        };
+        const result = await ordersCollection.updateOne(query, updateBook);
         res.send(result);
       } catch (error) {
         console.log(error);
