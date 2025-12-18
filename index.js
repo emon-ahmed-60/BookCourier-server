@@ -537,8 +537,24 @@ async function run() {
       try {
         const id = req.params.id;
         const query = { _id: new ObjectId(id) };
-        const result = await booksCollection.deleteOne(query);
-        res.send(result);
+
+        const book = await booksCollection.findOne(query);
+
+        if (!book) {
+          return res.status(404).json({ error: "Book not found" });
+        }
+
+        const deleteBookResult = await booksCollection.deleteOne(query);
+
+        const orderQuery = { title: book.title };
+        const deleteOrdersResult = await ordersCollection.deleteMany(
+          orderQuery
+        );
+
+        res.send({
+          deletedBook: deleteBookResult,
+          deletedOrdersCount: deleteOrdersResult.deletedCount,
+        });
       } catch (error) {
         console.log(error);
         res.status(500).json({ error: "Internal Server Error" });
