@@ -93,6 +93,28 @@ async function run() {
       }
     });
 
+    const verifyLibrarian = async (req, res, next) => {
+      const email = req.decoded_email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+
+      if (!user || user.role !== "librarian") {
+        res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+
+    app.get("/users", async (req, res) => {
+      try {
+        const cursor = usersCollection.find();
+        const result = await cursor.toArray();
+        res.send(result);
+      } catch (error) {
+        console.log(error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
     app.get("/my-books", async (req, res) => {
       try {
         const email = req.query.email;
@@ -260,6 +282,17 @@ async function run() {
       }
     });
 
+    app.get("/all-books", verifyFBToken, verifyAdmin, async (req, res) => {
+      try {
+        const cursor = booksCollection.find();
+        const result = await cursor.toArray();
+        res.send(result);
+      } catch (error) {
+        console.log(error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
     app.post("/users", async (req, res) => {
       try {
         const user = req.body;
@@ -322,7 +355,7 @@ async function run() {
       }
     });
 
-    app.post("/books", async (req, res) => {
+    app.post("/books", verifyFBToken, verifyLibrarian, async (req, res) => {
       try {
         const newBook = req.body;
         const result = await booksCollection.insertOne(newBook);
@@ -355,6 +388,24 @@ async function run() {
           },
         };
         const result = await usersCollection.updateOne(query, updateUser);
+        res.send(result);
+      } catch (error) {
+        console.log(error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
+    app.patch("/all-book/:id", verifyFBToken, verifyAdmin, async (req, res) => {
+      try {
+        const updateStatus = req.body;
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const update = {
+          $set: {
+            bookStatus: updateStatus.bookStatus,
+          },
+        };
+        const result = await booksCollection.updateOne(query, update);
         res.send(result);
       } catch (error) {
         console.log(error);
@@ -417,43 +468,53 @@ async function run() {
       }
     });
 
-    app.patch("/books/:id", async (req, res) => {
-      try {
-        const id = req.params.id;
-        const mrp_price = req.query.mrp_price;
-        const rental_rate_per_day = req.query.rental_rate_per_day;
-        const query = { _id: new ObjectId(id) };
-        const updatedData = {
-          $set: {
-            mrp_price: mrp_price,
-            rental_rate_per_day: rental_rate_per_day,
-          },
-        };
-        const result = await booksCollection.updateOne(query, updatedData);
-        res.send(result);
-      } catch (error) {
-        console.log(error);
-        res.status(500).json({ error: "Internal Server Error" });
+    app.patch(
+      "/books/:id",
+      verifyFBToken,
+      verifyLibrarian,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const mrp_price = req.query.mrp_price;
+          const rental_rate_per_day = req.query.rental_rate_per_day;
+          const query = { _id: new ObjectId(id) };
+          const updatedData = {
+            $set: {
+              mrp_price: mrp_price,
+              rental_rate_per_day: rental_rate_per_day,
+            },
+          };
+          const result = await booksCollection.updateOne(query, updatedData);
+          res.send(result);
+        } catch (error) {
+          console.log(error);
+          res.status(500).json({ error: "Internal Server Error" });
+        }
       }
-    });
+    );
 
-    app.patch("/book-update/:id", async (req, res) => {
-      try {
-        const id = req.params.id;
-        const update = req.body;
-        const query = { _id: new ObjectId(id) };
-        const updateBook = {
-          $set: {
-            status: update.bookStatus,
-          },
-        };
-        const result = await ordersCollection.updateOne(query, updateBook);
-        res.send(result);
-      } catch (error) {
-        console.log(error);
-        res.status(500).json({ error: "Internal Server Error" });
+    app.patch(
+      "/book-update/:id",
+      verifyFBToken,
+      verifyLibrarian,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const update = req.body;
+          const query = { _id: new ObjectId(id) };
+          const updateBook = {
+            $set: {
+              status: update.bookStatus,
+            },
+          };
+          const result = await ordersCollection.updateOne(query, updateBook);
+          res.send(result);
+        } catch (error) {
+          console.log(error);
+          res.status(500).json({ error: "Internal Server Error" });
+        }
       }
-    });
+    );
 
     app.patch("/bookorders/:id", async (req, res) => {
       try {
@@ -465,6 +526,18 @@ async function run() {
           },
         };
         const result = await ordersCollection.updateOne(query, update);
+        res.send(result);
+      } catch (error) {
+        console.log(error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
+    app.delete("/book/:id", verifyFBToken, verifyAdmin, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const result = await booksCollection.deleteOne(query);
         res.send(result);
       } catch (error) {
         console.log(error);
