@@ -1,12 +1,13 @@
 const express = require("express");
 const cors = require("cors");
 const app = express();
-
+require('dotenv').config();
 const port = process.env.PORT || 8000;
 const crypto = require("crypto");
 const admin = require("firebase-admin");
 
-const serviceAccount = require("./bookcourier-firebase-adminsdk.json");
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const serviceAccount = JSON.parse(decoded);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -21,7 +22,7 @@ function generateTrackingId() {
 }
 
 // Middleware
-require("dotenv").config();
+
 app.use(cors());
 app.use(express.json());
 
@@ -82,17 +83,6 @@ async function run() {
       next();
     };
 
-    app.get("/users", async (req, res) => {
-      try {
-        const cursor = usersCollection.find();
-        const result = await cursor.toArray();
-        res.send(result);
-      } catch (error) {
-        console.log(error);
-        res.status(500).json({ error: "Internal Server Error" });
-      }
-    });
-
     const verifyLibrarian = async (req, res, next) => {
       const email = req.decoded_email;
       const query = { email };
@@ -104,7 +94,7 @@ async function run() {
       next();
     };
 
-    app.get("/users", async (req, res) => {
+    app.get("/users",verifyFBToken,verifyAdmin, async (req, res) => {
       try {
         const cursor = usersCollection.find();
         const result = await cursor.toArray();
