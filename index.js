@@ -1,17 +1,41 @@
 const express = require("express");
 const cors = require("cors");
 const app = express();
-require('dotenv').config();
+require("dotenv").config();
 const port = process.env.PORT || 8000;
 const crypto = require("crypto");
 const admin = require("firebase-admin");
 
-const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+let cachedClient = null;
+
+async function connectDB() {
+  if (cachedClient) {
+    return cachedClient;
+  }
+
+  const client = new MongoClient(uri, {
+    serverApi: {
+      version: ServerApiVersion.v1,
+      strict: true,
+      deprecationErrors: true,
+    },
+  });
+
+  await client.connect();
+  cachedClient = client;
+  return client;
+}
+
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
+  "utf8",
+);
 const serviceAccount = JSON.parse(decoded);
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+}
 
 function generateTrackingId() {
   const prefix = "PRCL"; // your brand prefix
@@ -60,7 +84,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect();
+    const client = await connectDB();
 
     const database = client.db("BookCourier");
     const usersCollection = database.collection("users");
@@ -94,7 +118,7 @@ async function run() {
       next();
     };
 
-    app.get("/users",verifyFBToken,verifyAdmin, async (req, res) => {
+    app.get("/users", verifyFBToken, verifyAdmin, async (req, res) => {
       try {
         const cursor = usersCollection.find();
         const result = await cursor.toArray();
@@ -103,6 +127,10 @@ async function run() {
         console.log(error);
         res.status(500).json({ error: "Internal Server Error" });
       }
+    });
+
+    app.get("/health", (req, res) => {
+      res.send({ status: "ok", time: new Date() });
     });
 
     app.get("/my-books", async (req, res) => {
@@ -428,7 +456,7 @@ async function run() {
             };
             const userResult = await usersCollection.updateOne(
               userQuery,
-              updateUser
+              updateUser,
             );
           }
           const result = await librarianCollection.updateOne(query, update);
@@ -437,7 +465,7 @@ async function run() {
           console.log(error);
           res.status(500).json({ error: "Internal Server Error" });
         }
-      }
+      },
     );
 
     app.patch("/book/:id", async (req, res) => {
@@ -480,7 +508,7 @@ async function run() {
           console.log(error);
           res.status(500).json({ error: "Internal Server Error" });
         }
-      }
+      },
     );
 
     app.patch(
@@ -503,7 +531,7 @@ async function run() {
           console.log(error);
           res.status(500).json({ error: "Internal Server Error" });
         }
-      }
+      },
     );
 
     app.patch("/bookorders/:id", async (req, res) => {
@@ -537,9 +565,8 @@ async function run() {
         const deleteBookResult = await booksCollection.deleteOne(query);
 
         const orderQuery = { title: book.title };
-        const deleteOrdersResult = await ordersCollection.deleteMany(
-          orderQuery
-        );
+        const deleteOrdersResult =
+          await ordersCollection.deleteMany(orderQuery);
 
         res.send({
           deletedBook: deleteBookResult,
@@ -614,9 +641,8 @@ async function run() {
         };
 
         if (session.payment_status === "paid") {
-          const paymentResult = await paymentCollection.insertOne(
-            paymentHistory
-          );
+          const paymentResult =
+            await paymentCollection.insertOne(paymentHistory);
           res.send({
             modify: result,
             paymentInfo: paymentResult,
